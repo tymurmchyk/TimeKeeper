@@ -1,0 +1,93 @@
+body {
+	min-width: 300px;
+	min-height: 200px;
+	padding: 16px;
+	font-family: system-ui, -apple-system, sans-serif;
+}
+/* Keep the popup open by making it retain focus */
+#file-input-container {
+	display: inline-block;
+	position: relative;
+}
+#file-input-container input[type="file"] {
+	display: none;
+}
+.custom-file-button {
+	padding: 8px 16px;
+	background: #4CAF50;
+	color: white;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+}
+.custom-file-button:hover {
+	background: #45a049;
+}
+
+.file-input-container {
+	margin-bottom: 16px;
+}
+
+.file-input-container input[type="file"] {
+	display: none;
+}
+
+.file-label {
+	display: inline-block;
+	padding: 8px 16px;
+	background: #4CAF50;
+	color: white;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.file-label:hover {
+	background: #45a049;
+}
+
+.playback-controls {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+#toggle {
+	padding: 8px 16px;
+	background: #2196F3;
+	color: white;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 14px;
+}
+
+#toggle:hover {
+	background: #1976D2;
+}
+
+#progress {
+	width: 100%;
+	margin: 8px 0;
+}
+
+.bpm-display {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	font-size: 14px;
+}
+
+.bpm-display div {
+	display: flex;
+	justify-content: space-between;
+	padding: 4px 8px;
+	background: #f5f5f5;
+	border-radius: 4px;
+}
+
+.time-display {
+	text-align: center;
+	margin: 10px 0;
+	font-family: monospace;
+	font-size: 14px;
+}

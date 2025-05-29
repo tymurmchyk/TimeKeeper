@@ -1,0 +1,28 @@
+{
+	"manifest_version": 2,
+
+	"name": "TimeKeeper",
+	"version": "1.0",
+	"description": "Provides manual metronome and automatic beat detection for your songs.",
+
+	"sidebar_action": {
+		"default_panel": "sidebar.html"
+	},
+	
+	"background": {
+		"page": "background.html",
+		"persistent": false
+	},
+
+	"content_security_policy": "script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'; worker-src 'self' 'wasm-unsafe-eval';",
+
+	"permissions": [
+		"storage"
+    ],
+
+	"web_accessible_resources": [
+		"worker.js",
+		"file-mode/analyser.js",
+		"library/essentia/*"
+	]
+}

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<!-- <link rel="stylesheet" href="sidebar.css"> -->
+</head>
+<body>
+
+	<h1>TimeKeeper</h1>
+
+	<input type="file" id="file" accept="audio/*"/>
+	
+	<button type="button" id="toggle">▶</button>
+
+	<input type="range" id="position" min="0.00" max="1.00" value="0.00" step="0.001" disabled/>
+
+	<div class="time-display">
+		<span id="current-time">--:--</span> / <span id="duration">--:--</span>
+	</div>
+
+	<label>
+		song volume:
+		<input type="range" id="volume-song" min="0.00" max="1.00" value="1.00" step="0.001"/>
+	</label>
+
+	<label>
+		click volume:
+		<input type="range" id="volume-clicker" min="0.00" max="1.00" value="1.00" step="0.001"/>
+	</label>
+
+	<div class="bpm-display">
+		<div>average bpm: <span id="average-bpm">--</span></div>
+		<div>current bpm: <span id="current-bpm">--</span></div>
+	</div>
+
+
+	<script type="module" src="sidebar.js"></script>
+
+</body>
+</html>
