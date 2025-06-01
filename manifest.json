@@ -21,8 +21,8 @@
     ],
 
 	"web_accessible_resources": [
-		"worker.js",
-		"file-mode/analyser.js",
+		"audio/file-analyser.js",
+		"audio/realtime-analyser.js",
 		"library/essentia/*"
 	]
 }

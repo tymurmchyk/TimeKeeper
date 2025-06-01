@@ -21,13 +21,15 @@ let state = {
 
 const ui = {
 	elements: {
-		file: null,
+		fileInput: null,
+		fileSelect: null,
+		fileName: null,
 		toggle: null,
 		position: null,
 		currentTime: null,
 		duration: null,
-		volumeClicker: null,
 		volumeSong: null,
+		volumeClicker: null,
 		averageBpm: null,
 		currentBpm: null
 	},
@@ -38,7 +40,13 @@ const ui = {
 	},
 
 	update() {
-		ui.elements.file.textContent = state.file ? state.file.name : "";
+		if (state.file) {
+			ui.elements.fileName.textContent = state.file.name;
+			ui.elements.fileSelect.textContent = "change file";
+		} else {
+			ui.elements.fileName.textContent = "no file selected";
+			ui.elements.fileSelect.textContent = "choose file";
+		}
 
 		ui.elements.toggle.disabled = !state.file;
 		ui.elements.toggle.textContent = state.playing ? "⏸" : "▶";
@@ -63,7 +71,7 @@ const ui = {
 		ui.elements.averageBpm.textContent = state.analysis ? Math.round(state.analysis.bpm) : "--";
 		
 		ui.elements.currentBpm.textContent = "--";
-		if (state.analysis && ui.state.songTimeCurrent !== null) {
+		if (state.analysis?.beats && ui.state.songTimeCurrent !== null) {
 			if (state.analysis.beats.length <= 1) { return; }
 
 			let b;
@@ -94,15 +102,17 @@ const ui = {
 	},
 
 	handlers: {
+		async fileSelect(event) {
+			ui.elements.fileInput.click();
+		},
+
 		async fileChange(event) {
-			/** @type {File} */
 			const newFile = event.target.files[0];
 			
 			if (newFile) {
-				if (newFile.size > 2**20 * 20) { // (20 MB)
-					return failure({
-						description: `File is too big (${newFile.size})`
-					});
+				if (newFile.size > 2**20 * 20) {
+					console.error(`File is too big (${newFile.size})`);
+					return;
 				}
 
 				const buffer = new Uint8Array(await newFile.arrayBuffer());
@@ -126,7 +136,7 @@ const ui = {
 
 				await stateUpdate();
 				
-				console.log("File successfuly loaded.");
+				console.log("File successfully loaded.");
 			}
 			else {
 				const unloading = await sendMessage({
@@ -202,6 +212,19 @@ const ui = {
 			}
 
 			await stateUpdate();
+		},
+
+		async copyBpmToManual(bpm) {
+			if (!bpm || isNaN(bpm)) return;
+			
+			const copying = await sendMessage({
+				type: ["manual-mode", "change-bpm"],
+				data: { newBpm: Math.round(bpm) }
+			});
+			if (!copying || copying.type === "failure") {
+				console.error("Failed to copy BPM: " + (copying ? (copying?.description ?? "Unknown error") : "No response"));
+				return;
+			}
 		}
 	}
 };
@@ -253,23 +276,36 @@ function stopStateUpdates() {
 }
 
 export async function initialize() {
-	console.log("Initializing file mode sidebar...");
+	console.log("Initializing file mode's sidebar...");
 	
-	ui.elements.file = document.getElementById("file");
-	ui.elements.toggle = document.getElementById("toggle");
-	ui.elements.position = document.getElementById("position");
-	ui.elements.currentTime = document.getElementById("current-time");
-	ui.elements.duration = document.getElementById("duration");
-	ui.elements.volumeSong = document.getElementById("volume-song");
-	ui.elements.volumeClicker = document.getElementById("volume-clicker");
-	ui.elements.averageBpm = document.getElementById("average-bpm");
-	ui.elements.currentBpm = document.getElementById("current-bpm");
+	ui.elements.fileInput = document.getElementById("file-input");
+	ui.elements.fileSelect = document.getElementById("file-select");
+	ui.elements.fileName = document.getElementById("file-name");
+	ui.elements.toggle = document.getElementById("file-toggle");
+	ui.elements.position = document.getElementById("file-position");
+	ui.elements.currentTime = document.getElementById("file-current-time");
+	ui.elements.duration = document.getElementById("file-duration");
+	ui.elements.volumeSong = document.getElementById("file-volume-song");
+	ui.elements.volumeClicker = document.getElementById("file-volume-clicker");
+	ui.elements.averageBpm = document.getElementById("file-average-bpm");
+	ui.elements.currentBpm = document.getElementById("file-current-bpm");
 	
-	ui.elements.file.addEventListener("change", ui.handlers.fileChange);
+	ui.elements.fileSelect.addEventListener("click", ui.handlers.fileSelect);
+	ui.elements.fileInput.addEventListener("change", ui.handlers.fileChange);
 	ui.elements.toggle.addEventListener("click", ui.handlers.toggleClick);
 	ui.elements.position.addEventListener("input", ui.handlers.playbackInput);
-	ui.elements.volumeClicker.addEventListener("input", (e) => ui.handlers.volumeInput(e, "clicker"));
 	ui.elements.volumeSong.addEventListener("input", (e) => ui.handlers.volumeInput(e, "song"));
+	ui.elements.volumeClicker.addEventListener("input", (e) => ui.handlers.volumeInput(e, "clicker"));
+	ui.elements.averageBpm.addEventListener("click", () => {
+		const bpm = Number(ui.elements.averageBpm.textContent);
+		ui.handlers.copyBpmToManual(bpm);
+	});
+	ui.elements.currentBpm.addEventListener("click", () => {
+		const bpm = Number(ui.elements.currentBpm.textContent);
+		ui.handlers.copyBpmToManual(bpm);
+	});
 
 	await stateUpdate();
+
+	console.log("File mode's sidebar initialized.");
 }

@@ -76,13 +76,13 @@ export const messageHandlers = {
 			playing: state.playing,
 			songVolume: state.songVolume,
 			clickVolume: state.clickVolume,
-			duration: state?.duration ?? null,
+			duration: state.duration ?? null,
 			contextTimeAtStart: state?.contextTimeAtStart ?? null,
 			songTimeLast: state?.songTimeLast ?? null,
 			songTimeAtStart: state?.songTimeAtStart ?? null,
-			analysis: state?.analysis ? {
+			analysis: state.analysis ? {
 				bpm: state.analysis.bpm,
-				beats: state.analysis.beats.slice()
+				beats: state.analysis?.beats
 			} : null
 		};
 

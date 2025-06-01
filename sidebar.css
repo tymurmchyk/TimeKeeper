@@ -1,10 +1,157 @@
+:root, :root * {
+	font-family: "Courier New", Courier, monospace;
+}
+
 body {
 	min-width: 300px;
 	min-height: 200px;
 	padding: 16px;
-	font-family: system-ui, -apple-system, sans-serif;
+	margin: 0;
+	background: #f5f5f5;
 }
-/* Keep the popup open by making it retain focus */
+
+h1 {
+	margin: 0 0 16px 0;
+	font-size: 1.5em;
+	color: #333;
+}
+
+.mode {
+	background: white;
+	padding: 16px;
+	border-radius: 8px;
+	margin-bottom: 16px;
+	box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.mode > * {
+	margin-bottom: 16px;
+}
+
+.mode > *:last-child {
+	margin-bottom: 0;
+}
+
+h2 {
+	margin: 0;
+	font-size: 1.2em;
+	color: #333;
+	text-transform: lowercase;
+}
+
+button {
+	width: 100%;
+	padding: 8px 16px;
+	border: none;
+	border-radius: 4px;
+	background: #007bff;
+	color: white;
+	cursor: pointer;
+	font-size: 14px;
+	text-transform: lowercase;
+	font-family: inherit;
+}
+
+button:hover {
+	background: #0056b3;
+}
+
+button:disabled {
+	background: #ccc;
+	cursor: not-allowed;
+}
+
+label {
+	display: block;
+	margin-bottom: 4px;
+	color: #666;
+	text-transform: lowercase;
+}
+
+input, select {
+	font-family: inherit;
+	font-size: inherit;
+}
+
+input[type="file"] {
+	width: 100%;
+	margin-bottom: 8px;
+}
+
+input[type="number"] {
+	width: 60px;
+	padding: 4px;
+	border: 1px solid #ddd;
+	border-radius: 4px;
+}
+
+input[type="range"] {
+	width: 100%;
+	margin: 8px 0;
+}
+
+select {
+	width: 60px;
+	padding: 4px;
+	border: 1px solid #ddd;
+	border-radius: 4px;
+	text-transform: lowercase;
+	background: white;
+}
+
+.tempo-controls {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+}
+
+.tempo-controls label {
+	margin: 0;
+	flex-shrink: 0;
+}
+
+.tap-button {
+	height: 80px;
+	font-size: 24px;
+	background: #28a745;
+	transition: background-color 0.1s;
+	text-align: center;
+	line-height: 80px;
+	padding: 0;
+}
+
+.tap-button:hover {
+	background: #218838;
+}
+
+.tap-button.active {
+	background: #1e7e34;
+}
+
+.audio-playback {
+	margin: 16px 0;
+}
+
+#file-time {
+	text-align: right;
+	font-size: 14px;
+	color: #666;
+}
+
+.bpm-display {
+	font-size: 14px;
+	color: #666;
+	text-transform: lowercase;
+}
+
+.bpm-display div {
+	margin-bottom: 4px;
+}
+
+.bpm-display div:last-child {
+	margin-bottom: 0;
+}
+
 #file-input-container {
 	display: inline-block;
 	position: relative;
@@ -32,17 +179,29 @@ body {
 	display: none;
 }
 
-.file-label {
-	display: inline-block;
+.file-select-button {
+	width: 100%;
 	padding: 8px 16px;
 	background: #4CAF50;
 	color: white;
+	border: none;
 	border-radius: 4px;
 	cursor: pointer;
+	font-family: inherit;
+	font-size: 14px;
+	text-transform: lowercase;
+	margin-bottom: 8px;
 }
 
-.file-label:hover {
+.file-select-button:hover {
 	background: #45a049;
+}
+
+.file-name {
+	font-size: 14px;
+	color: #666;
+	word-break: break-all;
+	font-style: italic;
 }
 
 .playback-controls {
@@ -70,24 +229,44 @@ body {
 	margin: 8px 0;
 }
 
-.bpm-display {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	font-size: 14px;
-}
-
-.bpm-display div {
-	display: flex;
-	justify-content: space-between;
-	padding: 4px 8px;
-	background: #f5f5f5;
+.control-group {
+	margin-bottom: 16px;
+	padding: 8px;
 	border-radius: 4px;
+	background: #f9f9f9;
 }
 
-.time-display {
-	text-align: center;
-	margin: 10px 0;
-	font-family: monospace;
+.control-group:last-child {
+	margin-bottom: 0;
+}
+
+.volume-control {
+	margin-bottom: 8px;
+}
+
+.volume-control:last-child {
+	margin-bottom: 0;
+}
+
+#file-name {
+	margin-top: 8px;
 	font-size: 14px;
+	color: #666;
+	word-break: break-all;
+}
+
+/* File mode specific */
+#file-position {
+	flex-grow: 1;
+	margin: 0 8px;
+}
+
+#file-average-bpm,
+#file-current-bpm {
+	cursor: pointer;
+}
+
+#file-average-bpm:hover,
+#file-current-bpm:hover {
+	background: #f0f0f0;
 }

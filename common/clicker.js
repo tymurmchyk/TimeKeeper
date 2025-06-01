@@ -51,6 +51,7 @@ export class BaseClicker {
 			case "active":
 			case "closed":
 				this._state = newState;
+				break;
 
 			default: throw new Error(`Illegal state value (${newState})`);
 		}
@@ -152,31 +153,66 @@ export class IntervalClicker extends BaseClicker {
 	_next = null;
 	/** @type {number} */
 	_clickDuration = 0.015;
+	/** @type {number} */
+	_beatCountScheduling = 0;
+	/** @type {number} */
+	_beatCountCurrent = 0;
+
+	/**
+	 * @typedef {Object} ClickType
+	 * @property {string} type - Oscillator type (e.g., "sine", "square")
+	 * @property {number} frequency - Frequency in Hz
+	 * @property {number[]} beats - Array of beat numbers where this click type should be used (1-based)
+	 */
 
 	/**
 	 * @param {AudioContext} context Audio context to use.
 	 * @param {Object} options Oscillator options.
-	 * @param {string} [options.type="square"] Oscillator type.
-	 * @param {number} [options.frequency=440] Oscillator frequency in Hz.
+	 * @param {ClickType[]} [options.clicks] Array of click type configurations
 	 */
 	constructor(context, options = {}) {
 		super(context, options);
 		this._options = {
-			type: options.type ?? "square",
-			frequency: options.frequency ?? 440
+			clicks: options.clicks || [{
+				type: "square",
+				frequency: 440,
+				beats: [1]
+			}]
 		};
+	}
+
+	/**
+	 * Gets the current beat number (1-based) within the pattern
+	 * @private
+	 * @returns {number} Current beat number
+	 */
+	_getBeatNumber() {
+		const maxBeat = Math.max(...this._options.clicks.flatMap(click => click.beats));
+		return (this._beatCountScheduling % maxBeat) + 1;
 	}
 
 	/**
 	 * Creates a new oscillator node for producing a click.
 	 * @protected
+	 * @param {number} beatNumber Current beat number (1-based)
 	 * @returns {OscillatorNode} Created oscillator.
 	 */
-	_makeSource() {
-		const source = new OscillatorNode(this._context, this._options);
+	_makeSource(beatNumber) {
+		// Find the click type for this beat
+		const clickType = this._options.clicks.find(
+			click => click.beats.includes(beatNumber)
+		) || this._options.clicks[0]; // Default to first click type if no match
+
+		const source = new OscillatorNode(this._context, {
+			type: clickType.type,
+			frequency: clickType.frequency
+		});
+		source.onended = source.disconnect;
+
 		for (let d = 0; d < this._destinations.length; d++) {
 			source.connect(this._destinations[d]);
 		}
+
 		return source;
 	}
 
@@ -186,10 +222,12 @@ export class IntervalClicker extends BaseClicker {
 	 */
 	_disposeSources() {
 		if (this._currentSource) {
+			this._currentSource.onended = ()=>{};
 			this._currentSource.stop();
 			this._currentSource = null;
 		}
 		if (this._futureSource) {
+			this._futureSource.onended = ()=>{};
 			this._futureSource.stop();
 			this._futureSource = null;
 		}
@@ -199,7 +237,6 @@ export class IntervalClicker extends BaseClicker {
 	 * Schedules click source to play.
 	 * @param {OscillatorNode} source Click source to schedule.
 	 * @param {number} when Click time.
-	 * Note that it is relative to the context's `currentTime` value.
 	 */
 	_scheduleSource(source, when) {
 		source.start(when);
@@ -293,10 +330,14 @@ export class IntervalClicker extends BaseClicker {
 
 		this._disposeSources();
 		
+		this._timeContextStart = this._context.currentTime;
+		this._timeFirstClick = this._timeContextStart + when;
 		this._interval = interval.time;
-		this._next = this._context.currentTime + when;
+		this._beatCountScheduling = 0;
+		this._beatCountCurrent = 0;
+		this._next = this._timeFirstClick;
 		
-		this._currentSource = this._makeSource();
+		this._currentSource = this._makeSource(this._getBeatNumber());
 		this._scheduleSource(this._currentSource, this._next);
 
 		const counter = () => {
@@ -305,9 +346,21 @@ export class IntervalClicker extends BaseClicker {
 			}
 
 			if (this._context.currentTime >= this._next) {
-				this._next += this._interval;
+				this._beatCountScheduling++;
+				this._next = this._timeFirstClick + this._beatCountScheduling * this._interval;
+				const next = this._next;
 
-				const click = this._makeSource();
+				console.debug(`Scheduling click:\n- beat: ${this._beatCountScheduling};\n- time: ${this._next}.`);
+
+				const click = this._makeSource(this._getBeatNumber());
+				click.onended = () => {
+					const now = this._context.currentTime;
+					const scheduledTime = next;
+					this._beatCountCurrent = this._beatCountScheduling - 1;
+					click.disconnect();
+					console.debug(`Click ended:\n- context time: ${now};\n- scheduled to: ${scheduledTime};\n- difference: ${now - scheduledTime};\n- current beat: ${this.getCurrentBeat()}.`);
+				};
+
 				if (this._futureSource) { this._currentSource = this._futureSource; }
 				this._futureSource = click;
 
@@ -334,6 +387,8 @@ export class IntervalClicker extends BaseClicker {
 		this._disposeSources();
 		this._interval = null;
 		this._next = null;
+		this._beatCountScheduling = 0;
+		this._beatCountCurrent = 0;
 
 		this._state = "ready";
 	}
@@ -352,8 +407,15 @@ export class IntervalClicker extends BaseClicker {
 		this._context = null;
 		this._interval = 0;
 		this._next = 0;
+		this._beatCountScheduling = 0;
+		this._beatCountCurrent = 0;
 
 		this._state = "closed";
+	}
+
+	/** Gets the current beat number (1-based) within the pattern */
+	getCurrentBeat() {
+		return this._beatCountCurrent % Math.max(...this._options.clicks.flatMap(click => click.beats)) + 1;
 	}
 }
 
@@ -364,8 +426,10 @@ export class ScheduledClicker extends BaseClicker {
 	/** @type {number[]} */
 	_clickTimes = null;
 	/** @type {number} */
+	_timeAtStart = null;
+	/** @type {number} */
 	_nextClickIndex = 0;
-	
+	/** @type {number} */
 	_clickDuration = 0.015;
 
 	/**
@@ -392,6 +456,8 @@ export class ScheduledClicker extends BaseClicker {
 		for (let d = 0; d < this._destinations.length; d++) {
 			source.connect(this._destinations[d]);
 		}
+		source.onended = source.disconnect;
+		
 		return source;
 	}
 
@@ -402,20 +468,10 @@ export class ScheduledClicker extends BaseClicker {
 	_disposeSources() {
 		while (this._sources.length) {
 			this._sources[0].onended = ()=>{};
+			this._sources[0].disconnect();
 			this._sources[0].stop();
 			this._sources.shift();
 		}
-	}
-
-	/**
-	 * Schedules click source to play.
-	 * @param {OscillatorNode} source Click source to schedule.
-	 * @param {number} when Click time.
-	 * Note that it is relative to the context's `currentTime` value.
-	 */
-	_scheduleSource(source, when) {
-		source.start(when);
-		source.stop(when + this._clickDuration);
 	}
 
 	connect(destination) {
@@ -462,16 +518,22 @@ export class ScheduledClicker extends BaseClicker {
 
 	/**
 	 * Starts playing clicks at the scheduled times.
-	 * @param {Float32Array} clicks Array of timestamps in seconds when *consecutive* clicks should occur.
-	 * @param {number} when Time at which the first click must play.
-	 * Note that it's relative to the context's `currentTime` value.
 	 * @param {number} firstClickAfter Time in seconds determining
 	 * the time of the first click to be scheduled from the provided clicks.
 	 * The time difference between this parameter and the time of the click
-	 * offsets the click, so it's going to be silent.
+	 * will be an initial silence duration.
+	 * @param {Float32Array} clicks Array of timestamps in seconds when *consecutive* clicks should occur.
+	 * @param {number} [offset = 0.] Time offset added to the initial silence.
 	 */
-	start(clicks, when = 0., firstClickAfter = 0.) {
+	start(firstClickAfter, clicks, offset = 0.) {
 		this._throwIfClosed();
+
+		if (typeof firstClickAfter !== "number"
+			|| !isFinite(firstClickAfter)
+			|| firstClickAfter < 0.)
+		{
+			throw new TypeError(`\`firstClickAfter\` must be a finite number >= 0 (${firstClickAfter})`);
+		}
 
 		if (!clicks
 			|| !(clicks instanceof Float32Array)
@@ -480,18 +542,10 @@ export class ScheduledClicker extends BaseClicker {
 			throw new TypeError(`\`clicks\` must be a non-empty consecutive Float32Array (${clicks})`);
 		}
 
-		if (typeof when !== "number"
-			|| !isFinite(when)
-			|| when < 0.)
+		if (typeof offset !== "number"
+			|| !isFinite(offset))
 		{
-			throw new TypeError(`\`when\` must be a finite number >= 0 (${when})`);
-		}
-
-		if (typeof firstClickAfter !== "number"
-			|| !isFinite(firstClickAfter)
-			|| firstClickAfter < 0.)
-		{
-			throw new TypeError(`\`offset\` must be a finite number >= 0 (${firstClickAfter})`);
+			throw new TypeError(`\`offset\` must be a finite number (${offset})`);
 		}
 
 		this._disposeSources();
@@ -509,8 +563,26 @@ export class ScheduledClicker extends BaseClicker {
 			return;
 		}
 
-		const schedule = () => {
+		const now = this._timeAtStart = this._context.currentTime;
 
+		const schedule = (clickIndex) => {
+			const when = now + (clicks[clickIndex] - firstClickAfter) + offset;
+
+			const source = this._makeSource();
+			source.onended = () => {
+				console.log(
+					this._context.currentTime - this._timeAtStart,
+					this._clickTimes[this._nextClickIndex] + this._clickDuration,
+					this._clickTimes[this._nextClickIndex]
+				);
+				this._nextClickIndex++;
+				this._sources.shift();
+			};
+
+			source.start(when);
+			source.stop(when + this._clickDuration);
+			
+			this._sources.push(source);
 		};
 
 		let i = 0;
@@ -519,27 +591,16 @@ export class ScheduledClicker extends BaseClicker {
 			if (clicks[c+i] >= next) {
 				throw new Error(`\`clicks\` are not consecutive (${clicks[c]} >= ${next} ([${c}] >= [${c+1}]))`);
 			}
+
+			schedule(c + i);
+
 			i++;
 		}
 
-		schedule();
+		schedule(c + i);
 
-		for (i = this._nextClickIndex; i < clicks.length; i++) {
-			if (lastTime >= clicks[i]) {
-				throw new Error(`\`clicks\` is an array of NON-CONSECUTIVE clicks (${lastTime} > ${clicks[i]} at indecies ${i-1} and ${i})`);
-			}
-			lastTime = clicks[i];
-
-			const clickTime = startTime + (clicks[i] - firstClickAfter);
-			const source = this._makeSource();
-			this._sources.push(source);
-			source.onended = () => {
-				this._nextClickIndex++;
-				this._sources.shift();
-			};
-
-			this._scheduleSource(source, clickTime);
-		}
+		this._clickTimes = clicks.slice();
+		this._nextClickIndex = c;
 
 		this._state = "active";
 	}
@@ -548,7 +609,7 @@ export class ScheduledClicker extends BaseClicker {
 		this._throwIfClosed();
 
 		this._disposeSources();
-		this._clickTimes = [];
+		this._clickTimes = null;
 		this._nextClickIndex = 0;
 		
 		this._state = "ready";

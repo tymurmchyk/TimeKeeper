@@ -2,39 +2,80 @@
 <html>
 <head>
 	<meta charset="UTF-8">
-	<!-- <link rel="stylesheet" href="sidebar.css"> -->
+	<link rel="stylesheet" href="sidebar.css">
 </head>
 <body>
-
 	<h1>TimeKeeper</h1>
 
-	<input type="file" id="file" accept="audio/*"/>
-	
-	<button type="button" id="toggle">▶</button>
+	<div id="manual-mode" class="mode">
+		<h2>manual mode</h2>
 
-	<input type="range" id="position" min="0.00" max="1.00" value="0.00" step="0.001" disabled/>
+		<button id="manual-toggle">▶</button>
 
-	<div class="time-display">
-		<span id="current-time">--:--</span> / <span id="duration">--:--</span>
+		<label>
+			volume
+			<input type="range" id="manual-volume-clicker" min="0.00" max="1.00" step="0.01" value="0.50">
+		</label>
+
+		<div class="tempo-controls">
+			<label>
+				bpm
+				<input type="number" id="manual-bpm" min="15.000" max="500.000" value="120.000" step="1.000">
+			</label>
+
+			<label>
+				time
+				<select id="manual-time-signature">
+					<option value="2/4">2/4</option>
+					<option value="3/4">3/4</option>
+					<option value="4/4" selected>4/4</option>
+					<option value="5/4">5/4</option>
+					<option value="6/8">6/8</option>
+					<option value="9/8">9/8</option>
+					<option value="12/8">12/8</option>
+				</select>
+			</label>
+		</div>
+
+		<button id="manual-tap" class="tap-button">tap</button>
 	</div>
 
-	<label>
-		song volume:
-		<input type="range" id="volume-song" min="0.00" max="1.00" value="1.00" step="0.001"/>
-	</label>
+	<div id="file-mode" class="mode">
+		<h2>file mode</h2>
 
-	<label>
-		click volume:
-		<input type="range" id="volume-clicker" min="0.00" max="1.00" value="1.00" step="0.001"/>
-	</label>
+		<div class="file-input-container">
+			<input type="file" id="file-input" accept="audio/*">
+			<button id="file-select" class="file-select-button">choose file</button>
+			<div id="file-name" class="file-name">no file selected</div>
+		</div>
 
-	<div class="bpm-display">
-		<div>average bpm: <span id="average-bpm">--</span></div>
-		<div>current bpm: <span id="current-bpm">--</span></div>
+		<button id="file-toggle">▶</button>
+
+		<div class="audio-playback">
+			<input type="range" id="file-position" min="0.0000" max="1.0000" step="0.0001" value="0.0000">
+			<div id="file-time">
+				<span id="file-current-time">--:--</span>
+				/
+				<span id="file-duration">--:--</span>
+			</div>
+		</div>
+
+		<label>
+			song volume
+			<input type="range" id="file-volume-song" min="0.00" max="1.00" step="0.01" value="0.50">
+		</label>
+
+		<label>
+			click volume
+			<input type="range" id="file-volume-clicker" min="0.00" max="1.00" step="0.01" value="0.50">
+		</label>
+
+		<div class="bpm-display">
+			<div>average bpm: <span id="file-average-bpm">--</span></div>
+			<div>current bpm: <span id="file-current-bpm">--</span></div>
+		</div>
 	</div>
 
-
-	<script type="module" src="sidebar.js"></script>
-
+	<script src="sidebar.js" type="module"></script>
 </body>
 </html>

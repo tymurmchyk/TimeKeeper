@@ -1,5 +1,6 @@
 import { sendMessage, findHandler } from "./common/runtime-messaging.js";
 
+import * as manualMode from "./manual-mode/background.js";
 import * as fileMode from "./file-mode/background.js";
 
 if (typeof browser === "undefined") {
@@ -15,6 +16,8 @@ const messageHandlers = {
 		};
 	},
 
+	"manual-mode": manualMode.messageHandlers,
+	
 	"file-mode": fileMode.messageHandlers
 };
 
