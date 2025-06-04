@@ -350,7 +350,7 @@ export class IntervalClicker extends BaseClicker {
 				this._next = this._timeFirstClick + this._beatCountScheduling * this._interval;
 				const next = this._next;
 
-				console.debug(`Scheduling click:\n- beat: ${this._beatCountScheduling};\n- time: ${this._next}.`);
+				// console.debug(`Scheduling click:\n- beat: ${this._beatCountScheduling};\n- time: ${this._next}.`);
 
 				const click = this._makeSource(this._getBeatNumber());
 				click.onended = () => {
@@ -358,7 +358,8 @@ export class IntervalClicker extends BaseClicker {
 					const scheduledTime = next;
 					this._beatCountCurrent = this._beatCountScheduling - 1;
 					click.disconnect();
-					console.debug(`Click ended:\n- context time: ${now};\n- scheduled to: ${scheduledTime};\n- difference: ${now - scheduledTime};\n- current beat: ${this.getCurrentBeat()}.`);
+					
+					// console.debug(`Click ended:\n- context time: ${now};\n- scheduled to: ${scheduledTime};\n- difference: ${now - scheduledTime};\n- current beat: ${this.getCurrentBeat()}.`);
 				};
 
 				if (this._futureSource) { this._currentSource = this._futureSource; }
@@ -535,16 +536,11 @@ export class ScheduledClicker extends BaseClicker {
 			throw new TypeError(`\`firstClickAfter\` must be a finite number >= 0 (${firstClickAfter})`);
 		}
 
-		if (!clicks
-			|| !(clicks instanceof Float32Array)
-			|| !clicks.length)
-		{
-			throw new TypeError(`\`clicks\` must be a non-empty consecutive Float32Array (${clicks})`);
+		if (!clicks || !clicks.length) {
+			throw new TypeError(`\`clicks\` must be a non-empty consecutive array (${clicks})`);
 		}
 
-		if (typeof offset !== "number"
-			|| !isFinite(offset))
-		{
+		if (typeof offset !== "number" || !isFinite(offset)) {
 			throw new TypeError(`\`offset\` must be a finite number (${offset})`);
 		}
 
@@ -565,16 +561,21 @@ export class ScheduledClicker extends BaseClicker {
 
 		const now = this._timeAtStart = this._context.currentTime;
 
+		this._clickTimes = clicks.slice();
+		this._nextClickIndex = c;
+
 		const schedule = (clickIndex) => {
-			const when = now + (clicks[clickIndex] - firstClickAfter) + offset;
+			const when = now + (this._clickTimes[clickIndex] - firstClickAfter) + offset;
 
 			const source = this._makeSource();
 			source.onended = () => {
-				console.log(
-					this._context.currentTime - this._timeAtStart,
-					this._clickTimes[this._nextClickIndex] + this._clickDuration,
-					this._clickTimes[this._nextClickIndex]
-				);
+				const idx = clickIndex;
+				console.debug("Click:", {
+					possibleStart: this._context.currentTime - this._timeAtStart - this._clickDuration,
+					ended: this._context.currentTime - this._timeAtStart,
+					hadToStart: this._clickTimes[idx],
+					hadToEnd: this._clickTimes[idx] + this._clickDuration
+				});
 				this._nextClickIndex++;
 				this._sources.shift();
 			};
@@ -598,9 +599,6 @@ export class ScheduledClicker extends BaseClicker {
 		}
 
 		schedule(c + i);
-
-		this._clickTimes = clicks.slice();
-		this._nextClickIndex = c;
 
 		this._state = "active";
 	}

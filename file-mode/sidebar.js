@@ -16,7 +16,9 @@ let state = {
 	contextTimeAtStart: null,
 	songTimeLast: null,
 	songTimeAtStart: null,
-	analysis: null
+	analysis: null,
+	tempoPower: 1,
+	clickOffset: 0
 };
 
 const ui = {
@@ -31,19 +33,26 @@ const ui = {
 		volumeSong: null,
 		volumeClicker: null,
 		averageBpm: null,
-		currentBpm: null
+		currentBpm: null,
+		tempoHalf: null,
+		tempoDouble: null,
+		offset: null,
+		offsetMinus: null,
+		offsetPlus: null
 	},
 
 	state: {
 		updateInterval: null,
-		songTimeCurrent: null
+		songTimeCurrent: null,
+		isOffsetFocused: false
 	},
 
 	update() {
 		if (state.file) {
 			ui.elements.fileName.textContent = state.file.name;
 			ui.elements.fileSelect.textContent = "change file";
-		} else {
+		}
+		else {
 			ui.elements.fileName.textContent = "no file selected";
 			ui.elements.fileSelect.textContent = "choose file";
 		}
@@ -62,38 +71,57 @@ const ui = {
 			ui.elements.position.value = 0.;
 		}
 
-		ui.elements.currentTime.textContent = formatTime(ui.state?.songTimeCurrent);
+		ui.elements.currentTime.textContent = formatTime(ui.state.songTimeCurrent ?? state.songTimeLast);
 		ui.elements.duration.textContent = formatTime(state?.duration);
 		
 		ui.elements.volumeClicker.value = state.clickVolume;
 		ui.elements.volumeSong.value = state.songVolume;
 
 		ui.elements.averageBpm.textContent = state.analysis ? Math.round(state.analysis.bpm) : "--";
-		
-		ui.elements.currentBpm.textContent = "--";
-		if (state.analysis?.beats && ui.state.songTimeCurrent !== null) {
-			if (state.analysis.beats.length <= 1) { return; }
 
-			let b;
-			for (b = 0; b < state.analysis.beats.length; b++) {
-				if (ui.state.songTimeCurrent >= state.analysis.beats[b]) {
-					break;
+		ui.elements.currentBpm.textContent = "--";
+		if (state.analysis?.beats?.length > 1) {
+			const currentTime = ui.state.songTimeCurrent ?? state.songTimeLast;
+			if (currentTime !== null) {
+				let currentBeatIndex = state.analysis.beats.length - 1;
+				for (let i = 0; i < state.analysis.beats.length; i++) {
+					if (state.analysis.beats[i] > currentTime) {
+						currentBeatIndex = Math.max(0, i - 1);
+						break;
+					}
+				}
+
+				const windowSize = 5;
+				const startIdx = Math.max(0, currentBeatIndex - windowSize);
+				const endIdx = Math.min(state.analysis.beats.length - 1, currentBeatIndex + windowSize);
+				
+				let totalInterval = 0;
+				let intervals = 0;
+				
+				for (let i = startIdx; i < endIdx; i++) {
+					totalInterval += state.analysis.beats[i + 1] - state.analysis.beats[i];
+					intervals++;
+				}
+
+				if (intervals > 0) {
+					const avgInterval = totalInterval / intervals;
+					const currentBpm = Math.round(60 / avgInterval);
+					ui.elements.currentBpm.textContent = currentBpm;
 				}
 			}
-
-			let i, c = 0,
-				current = 0;
-			for (let i = Math.max(0, b - 5); i < Math.min(b + 5, state.analysis.beats.length - 1); i++) {
-				current += state.analysis.beats[b + 1] - state.analysis.beats[b];
-				c++;
-			}
-
-			current =  60. / (current / i);
-
-			ui.elements.currentBpm.textContent = Math.round(current);
 		}
 
-		if (state.file) {
+		if (!ui.state.isOffsetFocused) {
+			ui.elements.offset.value = state.clickOffset.toFixed(3);
+		}
+
+		ui.elements.tempoHalf.disabled = !state.file;
+		ui.elements.tempoDouble.disabled = !state.file;
+		ui.elements.offset.disabled = !state.file;
+		ui.elements.offsetMinus.disabled = !state.file;
+		ui.elements.offsetPlus.disabled = !state.file;
+
+		if (state.playing) {
 			startStateUpdates();
 		}
 		else {
@@ -225,6 +253,90 @@ const ui = {
 				console.error("Failed to copy BPM: " + (copying ? (copying?.description ?? "Unknown error") : "No response"));
 				return;
 			}
+
+			const forcing = await sendMessage({
+				type: ["manual-mode", "force-update"]
+			});
+			if (!forcing || forcing.type === "failure") {
+				console.error("Failed to force manual mode update: " + (forcing ? (forcing?.description ?? "Unknown error") : "No response"));
+				return;
+			}
+		},
+
+		async tempoHalf() {
+			const changing = await sendMessage({
+				type: ["file-mode", "change-tempo-multiplier"],
+				data: { direction: -1 }
+			});
+			if (!changing || changing.type === "failure") {
+				console.error("Failed to change tempo power: " + (changing ? (changing?.description ?? "Unknown error") : "No response"));
+				return;
+			}
+			await stateUpdate();
+		},
+
+		async tempoDouble() {
+			const changing = await sendMessage({
+				type: ["file-mode", "change-tempo-multiplier"],
+				data: { direction: 1 }
+			});
+			if (!changing || changing.type === "failure") {
+				console.error("Failed to change tempo power: " + (changing ? (changing?.description ?? "Unknown error") : "No response"));
+				return;
+			}
+			await stateUpdate();
+		},
+
+		offsetFocus(event) {
+			event.target.focus();
+			ui.state.isOffsetFocused = true;
+		},
+
+		offsetBlur() {
+			ui.state.isOffsetFocused = false;
+			ui.update();
+		},
+
+		async offsetChange(event) {
+			let newOffset = parseFloat(event.target.value);
+			if (isNaN(newOffset)) {
+				ui.update();
+				newOffset = parseFloat(event.target.value);
+				if (isNaN(newOffset)) {
+					return;
+				}
+			}
+
+			const changing = await sendMessage({
+				type: ["file-mode", "change-click-offset"],
+				data: { offset: newOffset }
+			});
+			if (!changing || changing.type === "failure") {
+				console.error("Failed to change click offset: " + (changing ? (changing?.description ?? "Unknown error") : "No response"));
+				return;
+			}
+
+			await stateUpdate();
+		},
+
+		async offsetAdjust(direction) {
+			if (!state.analysis?.bpm) return;
+			
+			const beatInterval = 60 / state.analysis.bpm;
+			const scaledInterval = beatInterval / Math.pow(2, state.tempoPower);
+			const halfBeatInterval = scaledInterval / 2;
+			const newOffset = state.clickOffset + (direction * halfBeatInterval);
+
+			const changing = await sendMessage({
+				type: ["file-mode", "change-click-offset"],
+				data: { offset: newOffset }
+			});
+			if (!changing || changing.type === "failure") {
+				console.error("Failed to change click offset: " + (changing ? (changing?.description ?? "Unknown error") : "No response"));
+				return;
+			}
+
+			await stateUpdate();
 		}
 	}
 };
@@ -251,13 +363,16 @@ async function stateUpdate() {
 		analysis: receivedState.analysis ? {
 			bpm: Number(receivedState.analysis.bpm),
 			beats: receivedState.analysis.beats ? Array.from(receivedState.analysis.beats) : null
-		} : null
+		} : null,
+		clickOffset: Number(receivedState.clickOffset),
+		tempoPower: Number(receivedState.tempoPower)
 	};
 
 	ui.state = {
 		updateInterval: ui.state.updateInterval,
 		songTimeCurrent: gettingState.data.stateForUI.songTimeCurrent !== null ? 
-			Number(gettingState.data.stateForUI.songTimeCurrent) : null
+			Number(gettingState.data.stateForUI.songTimeCurrent) : null,
+		isOffsetFocused: ui.state.isOffsetFocused
 	};
 
 	ui.update();
@@ -289,6 +404,11 @@ export async function initialize() {
 	ui.elements.volumeClicker = document.getElementById("file-volume-clicker");
 	ui.elements.averageBpm = document.getElementById("file-average-bpm");
 	ui.elements.currentBpm = document.getElementById("file-current-bpm");
+	ui.elements.tempoHalf = document.getElementById("file-tempo-half");
+	ui.elements.tempoDouble = document.getElementById("file-tempo-double");
+	ui.elements.offset = document.getElementById("file-offset");
+	ui.elements.offsetMinus = document.getElementById("file-offset-minus");
+	ui.elements.offsetPlus = document.getElementById("file-offset-plus");
 	
 	ui.elements.fileSelect.addEventListener("click", ui.handlers.fileSelect);
 	ui.elements.fileInput.addEventListener("change", ui.handlers.fileChange);
@@ -304,6 +424,14 @@ export async function initialize() {
 		const bpm = Number(ui.elements.currentBpm.textContent);
 		ui.handlers.copyBpmToManual(bpm);
 	});
+	ui.elements.tempoHalf.addEventListener("click", ui.handlers.tempoHalf);
+	ui.elements.tempoDouble.addEventListener("click", ui.handlers.tempoDouble);
+	ui.elements.offset.addEventListener("change", ui.handlers.offsetChange);
+	ui.elements.offset.addEventListener("input", ui.handlers.offsetFocus);
+	ui.elements.offset.addEventListener("focus", ui.handlers.offsetFocus);
+	ui.elements.offset.addEventListener("blur", ui.handlers.offsetBlur);
+	ui.elements.offsetMinus.addEventListener("click", () => ui.handlers.offsetAdjust(-1));
+	ui.elements.offsetPlus.addEventListener("click", () => ui.handlers.offsetAdjust(1));
 
 	await stateUpdate();
 

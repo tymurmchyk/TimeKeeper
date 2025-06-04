@@ -70,6 +70,24 @@
 			<input type="range" id="file-volume-clicker" min="0.00" max="1.00" step="0.01" value="0.50">
 		</label>
 
+		<div class="tempo-controls">
+			<div class="tempo-multiplier">
+				<button id="file-tempo-half">÷2</button>
+				<button id="file-tempo-double">×2</button>
+			</div>
+			
+			<div class="offset-controls">
+				<label>
+					offset (s)
+					<input type="number" id="file-offset" min="-10.000" max="10.000" step="0.001" value="0.000">
+				</label>
+				<div class="offset-buttons">
+					<button id="file-offset-minus">-½ beat</button>
+					<button id="file-offset-plus">+½ beat</button>
+				</div>
+			</div>
+		</div>
+
 		<div class="bpm-display">
 			<div>average bpm: <span id="file-average-bpm">--</span></div>
 			<div>current bpm: <span id="file-current-bpm">--</span></div>

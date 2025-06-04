@@ -2,7 +2,7 @@
 	"manifest_version": 2,
 
 	"name": "TimeKeeper",
-	"version": "1.0",
+	"version": "0.1",
 	"description": "Provides manual metronome and automatic beat detection for your songs.",
 
 	"sidebar_action": {

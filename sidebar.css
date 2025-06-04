@@ -100,14 +100,72 @@ select {
 }
 
 .tempo-controls {
-	display: flex;
-	align-items: center;
-	gap: 16px;
+	margin-top: 16px;
+	padding: 8px;
+	background: #f5f5f5;
+	border-radius: 4px;
 }
 
-.tempo-controls label {
-	margin: 0;
-	flex-shrink: 0;
+.tempo-multiplier {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 12px;
+}
+
+.tempo-multiplier button {
+	flex: 1;
+	padding: 4px 8px;
+	font-family: inherit;
+	font-size: 14px;
+	background: #2196F3;
+	color: white;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.tempo-multiplier button:hover {
+	background: #1976D2;
+}
+
+.offset-controls {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.offset-controls label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.offset-controls input[type="number"] {
+	width: 80px;
+	padding: 4px;
+	font-family: inherit;
+	font-size: 14px;
+}
+
+.offset-buttons {
+	display: flex;
+	gap: 8px;
+}
+
+.offset-buttons button {
+	flex: 1;
+	padding: 4px 8px;
+	font-family: inherit;
+	font-size: 14px;
+	background: #4CAF50;
+	color: white;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.offset-buttons button:hover {
+	background: #388E3C;
 }
 
 .tap-button {

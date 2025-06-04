@@ -1,6 +1,7 @@
 import { success, failure } from "../common/result.js";
 import { state } from "./state.js";
 import * as audio from "./audio.js";
+import { sendMessage } from "../common/runtime-messaging.js";
 
 const MIN_BPM = 15;
 const MAX_BPM = 500;
@@ -216,6 +217,13 @@ export const messageHandlers = {
 			}, MAX_TAP_INTERVAL * 1000);
 		}
 
+		return success();
+	},
+
+	async "force-update"() {
+		sendMessage({
+			type: ["manual-mode", "force-update"]
+		})
 		return success();
 	}
 }; 

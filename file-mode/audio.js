@@ -31,28 +31,24 @@ const analysis = {
 	analyser: null
 };
 
-export function isBaseSetup() { return !!playback.context; }
-export function isBufferSetup() { return isBaseSetup() && playback.buffer !== null; }
+export function isPlaybackSetup() { return !!playback.context; }
+export function isBufferSetup() { return isPlaybackSetup() && playback.buffer !== null; }
 export function isAnalysisSetup() { return isBufferSetup() && analysis.analyser !== null; }
 export function isSetup() { return isAnalysisSetup(); }
 
-export async function setup(arrayBuffer) {
-	setupBase();
-	await setupBuffer(arrayBuffer);
-	await setupAnalysis();
-
-	return success();
-}
-
-// function setupPlayback() {}
-// function setupAnalysis() {}
-
-function setupBase() {
-	if (isBaseSetup()) {
-		return success();
+/**
+ * @param {ArrayBuffer} arrayBuffer 
+ */
+async function _setupPlayback(arrayBuffer) {
+	playback.context = new AudioContext();
+	
+	try { playback.buffer = await playback.context.decodeAudioData(arrayBuffer.slice()); }
+	catch (error) {
+		return failure({
+			description: "Couldn't decode array buffer for playback"
+		});
 	}
 
-	playback.context = new AudioContext();
 	playback.songGain = new GainNode(playback.context, { gain: state.songVolume });
 	playback.clickGain = new GainNode(playback.context, { gain: state.clickVolume });
 	
@@ -62,26 +58,26 @@ function setupBase() {
 	return success();
 }
 
-async function setupBuffer(arrayBuffer) {
-	if (isBufferSetup()) {
-		return success();
-	}
-	playback.buffer = await playback.context.decodeAudioData(arrayBuffer);
-	return success();
-}
-
-async function setupAnalysis() {
-	if (isAnalysisSetup()) {
-		return success();
-	}
-
+async function _setupAnalysis(arrayBuffer) {
 	analysis.context = new OfflineAudioContext({
 		numberOfChannels: playback.buffer.numberOfChannels,
 		length: playback.buffer.length,
-		sampleRate: playback.buffer.sampleRate
+		sampleRate: 44100
 	});
 
-	analysis.buffer = await analysis.context.decodeAudioData(playback.buffer.getChannelData(0).buffer);
+	try { analysis.buffer = await analysis.context.decodeAudioData(arrayBuffer.slice()); }
+	catch (error) {
+		return failure({
+			description: "Couldn't decode array buffer for analysis"
+		})
+	}
+
+	console.debug("Analysis buffer:", {
+		numberOfChannels: analysis.buffer.numberOfChannels,
+		length: analysis.buffer.length,
+		sampleRate: analysis.buffer.sampleRate,
+		duration: analysis.buffer.duration
+	});
 
 	const processorURL = browser.runtime.getURL("file-mode/tempo-processor.js");
 	await analysis.context.audioWorklet.addModule(processorURL);
@@ -89,38 +85,30 @@ async function setupAnalysis() {
 	const analysisSource = new AudioBufferSourceNode(analysis.context, { buffer: analysis.buffer });
 	analysis.analyser = new AudioWorkletNode(analysis.context, 'tempo-processor', {
 		numberOfInputs: 1,
-		numberOfOutputs: 1,
-		parameterData: {
-			sensitivity: 0.5
-		}
+		numberOfOutputs: 1
 	});
 
 	analysis.analyser.port.onmessage = (e) => {
 		const message = e.data;
 		switch (message.type) {
-			case 'beat':
-				console.debug('Beat detected:', message);
-				if (!state.analysis) {
-					state.analysis = {
-						bpm: message.bpm,
-						beats: [],
-						confidence: 0
-					};
-				}
-				state.analysis.beats.push(message.time);
-				state.analysis.bpm = message.bpm;
+			case "update":
+				const update = message;
+				console.debug("Analysis update:", message);
 
-				// If we're playing and don't have a clicker yet, start it
-				if (state.playing && !playback.clicker) {
-					setupClicker();
-					startClicker(state.songTimeAtStart);
+				state.analysis = {
+					bpm: update.bpm,
+					beats: update.beats,
+					onsets: update.onsets,
+					completed: update.completed
+				};
+
+				if (state.playing) {
+					_startClicker(playback.context.currentTime - state.contextTimeAtStart);
 				}
 				break;
-			case 'analysis_complete':
-				console.log('Analysis complete:', state.analysis);
-				break;
+				
 			default:
-				console.warn('Unknown message from tempo processor:', message);
+				console.warn("Unknown message from tempo processor:", message);
 		}
 	};
 
@@ -129,34 +117,91 @@ async function setupAnalysis() {
 
 	analysisSource.start();
 	
-	try {
-		await analysis.context.startRendering();
-	} catch (error) {
-		console.error('Analysis failed:', error);
-		return failure({
-			description: "Failed to analyze audio: " + error.message
+	console.debug("Starting audio analysis...");
+	const renderPromise = analysis.context.startRendering();
+	
+	renderPromise.then(() => {
+		console.debug("Audio analysis completed, requesting final state...");
+		analysis.analyser.port.postMessage({
+			type: "finish"
 		});
-	}
+	}).catch(error => {
+		console.error("Error during audio analysis:", error);
+	});
 
 	return success();
 }
 
-function setupClicker() {
-	if (!isAnalysisSetup() || !state.analysis) { return; }
-	
-	if (playback.clicker) { playback.clicker.close(); }
-
-	if (state.analysis?.beats?.length > 0) {
-		playback.clicker = new ScheduledClicker(playback.context);
+function _startClicker(songTime) {
+	if (state.analysis?.beats?.length === 0) {
+		return;
 	}
-	else if (state.analysis?.bpm) {
-		playback.clicker = new IntervalClicker(playback.context);
+
+	if (songTime === undefined) {
+		if (state.playing) {
+			songTime = playback.context.currentTime - state.contextTimeAtStart + state.songTimeAtStart;
+		}
+		else {
+			songTime = state.songTimeLast ?? 0.;
+		}
+	}
+	else if (songTime < 0.) { songTime = 0.; }
+	else if (songTime > playback.buffer.duration) { return; }
+
+	playback.clicker?.close();
+
+	const clicker = new ScheduledClicker(playback.context);
+	clicker.connect(playback.clickGain);
+
+	let adjustedBeats;
+	if (state.tempoPower === 0) {
+		adjustedBeats = new Float32Array(state.analysis.beats);
+	}
+	else if (state.tempoPower > 0) {
+		const multiplier = Math.pow(2, state.tempoPower);
+		const newLength = (state.analysis.beats.length - 1) * multiplier + 1;
+		adjustedBeats = new Float32Array(newLength);
+
+		for (let i = 0; i < state.analysis.beats.length - 1; i++) {
+			const start = state.analysis.beats[i];
+			const end = state.analysis.beats[i + 1];
+			const interval = (end - start) / multiplier;
+			
+			for (let j = 0; j < multiplier; j++) {
+				adjustedBeats[i * multiplier + j] = start + interval * j;
+			}
+		}
+		adjustedBeats[adjustedBeats.length - 1] = state.analysis.beats[state.analysis.beats.length - 1];
 	}
 	else {
-		return; // No valid analysis data to create clicker
+		const divisor = Math.pow(2, -state.tempoPower);
+		adjustedBeats = new Float32Array(Math.ceil(state.analysis.beats.length / divisor));
+		for (let i = 0; i < adjustedBeats.length; i++) {
+			adjustedBeats[i] = state.analysis.beats[i * divisor];
+		}
 	}
 
-	playback.clicker.connect(playback.clickGain);
+	clicker.start(songTime, adjustedBeats, state.clickOffset);
+
+	playback.clicker = clicker;
+}
+
+export async function setup(arrayBuffer) {
+	await close();
+
+	const playbackSetup = await _setupPlayback(arrayBuffer);
+	if (playbackSetup.type === "failure") {
+		await close();
+		return playbackSetup;
+	}
+
+	const analysisSetup = await _setupAnalysis(arrayBuffer);
+	if (analysisSetup.type === "failure") {
+		await close();
+		return analysisSetup;
+	}
+
+	return success();
 }
 
 export function start(songTime) {
@@ -184,15 +229,16 @@ export function start(songTime) {
 		playback.source.disconnect();
 	}
 	playback.source = new AudioBufferSourceNode(playback.context, { buffer: playback.buffer });
-	playback.source.onended = (e) => { console.log("Song has ended. Nothing is done."); };
+	playback.source.onended = (e) => {
+		console.log("Song has ended.");
+		pause();
+	};
 	playback.source.connect(playback.songGain);
 
 	playback.source.start(0., songTime);
 
-	// Only start clicker if we have analysis results
 	if (state.analysis?.beats?.length > 0 || state.analysis?.bpm) {
-		setupClicker();
-		startClicker(songTime);
+		_startClicker(songTime);
 	}
 
 	state.playing = true;
@@ -226,108 +272,75 @@ export function pause() {
 	return success();
 }
 
-export function close() {
-	if (!isSetup()) {
-		return success();
-	}
+/**
+ * Sends a message through a MessageChannel and returns a Promise that resolves with the response
+ * @param {MessagePort} targetPort 
+ * @param {Object} message 
+ * @returns {Promise<any>}
+ */
+async function sendChannelMessage(targetPort, message) {
+	const channel = new MessageChannel();
+	const [myPort, theirPort] = [channel.port1, channel.port2];
 
-	playback.context.close();
-	playback.context = null;
-	playback.buffer = null;
-	playback.source = null;
-	playback.clicker?.close();
-	playback.clicker = null;
+	try {
+		const response = await new Promise((resolve, reject) => {
+			myPort.onmessage = (e) => resolve(e.data);
+			myPort.onmessageerror = (error) => reject(new Error('Failed to receive message: ' + error));
+
+			message.port = theirPort;
+			targetPort.postMessage(message, [theirPort]);
+		});
+
+		return response;
+	}
+	finally {
+		myPort.onmessage = null;
+		myPort.onmessageerror = null;
+		myPort.close();
+	}
+}
+
+export async function close() {
 	playback.songGain = null;
 	playback.clickGain = null;
+	playback.clicker?.close();
+	playback.clicker = null;
+	playback.source = null;
+	playback.buffer = null;
+	playback.context?.close();
+	playback.context = null;
 
-	analysis.analyser?.disconnect();
+	if (analysis.analyser) {
+		await sendChannelMessage(analysis.analyser.port, { type: "close" });
+	}
 	analysis.analyser = null;
-	analysis.context = null;
 	analysis.buffer = null;
-
-	return success();
+	analysis.context = null;
 }
 
-function startClicker(songTime) {
-	if (state.analysis === null) { return; }
+export function getContextCurrentTime() { return isSetup() ? playback.context.currentTime : null; }
+export function getDuration() { return isSetup() ? playback.buffer.duration : null; }
 
-	if (songTime === undefined) {
-		if (state.playing) {
-			songTime = playback.context.currentTime - state.contextTimeAtStart + state.songTimeAtStart;
-		}
-		else {
-			songTime = state.songTimeLast ?? 0.;
-		}
-	}
-	else if (songTime < 0. || songTime > playback.buffer.duration) {
+export function setVolume(target, newVolume) {
+	if (typeof newVolume !== "number" || newVolume < 0. || newVolume > 1.) {
 		return failure({
-			description: `Illegal song time value: ${songTime} not in [0; ${playback.buffer.duration}]`
-		});
-	}
-
-	setupClicker();
-
-	if (playback.clicker instanceof ScheduledClicker) {
-		playback.clicker.start(songTime, state.analysis.beats);
-	}
-	else if (playback.clicker instanceof IntervalClicker) {
-		playback.clicker.start(0., { time: state.analysis.bpm, type: "bpm" });
-	}
-}
-
-export function startAnalysis() {
-	if (playback.buffer.numberOfChannels > 2) {
-		return failure({
-			description: `Audio has more than 2 channels which is not supported (${playback.buffer.numberOfChannels})`
-		})
-	}
-
-	let channels = [];
-	for (let c = 0; c < playback.buffer.numberOfChannels; c++) {
-		channels.push(playback.buffer.getChannelData(c).slice());
-	}
-
-	analysis.analyser.port.postMessage({
-		type: "analyse",
-		data: { channels }
-	});
-
-	return success();
-}
-
-export function getContextCurrentTime() {
-	return playback.context?.currentTime ?? null;
-}
-
-export function getDuration() {
-	if (isSetup()) {
-		return playback.buffer.duration;
-	}
-	else {
-		return null;
-	}
-}
-
-export function setVolume(target, value) {
-	if (typeof value !== "number" || value < 0. || value > 1.) {
-		return failure({
-			description: `Volume must be a number in range [0; 1] (${value})`
+			description: `\`newVolume\` must be a number in range [0; 1] (${newVolume})`
 		});
 	}
 
 	switch (target) {
 		case "clicker":
-			state.clickVolume = value;
-			if (isBaseSetup()) { playback.clickGain.gain.value = value; }
+			state.clickVolume = newVolume;
+			if (isPlaybackSetup()) { playback.clickGain.gain.value = newVolume; }
 			break;
 			
 		case "song":
-			state.songVolume = value;
-			if (isBaseSetup()) { playback.songGain.gain.value = value; }
+			state.songVolume = newVolume;
+			if (isPlaybackSetup()) { playback.songGain.gain.value = newVolume; }
 			break;
 
 		default: return failure({
-			description: `Target must be either "clicker" or "song" (${target})`
+			description: `\`target\` must be either "clicker" or "song" (${target})`
 		});
 	}
 

@@ -15,6 +15,10 @@ export let state = {
     songTimeLast: null,
     /** @type {number | null} */
     songTimeAtStart: null,
-    /** @type {{ bpm: number, beats: Float32Array } | null} */
-    analysis: null
+    /** @type {{ bpm: number, beats: Float32Array, completed: boolean } | null} */
+    analysis: null,
+    /** @type {number} */
+    tempoPower: 0,
+    /** @type {number} */
+    clickOffset: 0.
 };

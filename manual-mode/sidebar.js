@@ -90,10 +90,6 @@ const ui = {
         },
 
         async bpmChange(event) {
-            if (ui.state.isBpmFocused) {
-                return;
-            }
-
             let newBPM = parseInt(event.target.value);
 
             if (isNaN(newBPM) || newBPM < 15) { newBPM = 15; }
@@ -141,7 +137,8 @@ const ui = {
             await stateUpdate();
         },
 
-        bpmFocus() {
+        bpmFocus(event) {
+            event.target.focus();
             ui.state.isBpmFocused = true;
         },
 
@@ -198,11 +195,18 @@ export async function initialize() {
 
     ui.elements.toggle.addEventListener("click", ui.handlers.toggleClick);
     ui.elements.bpm.addEventListener("change", ui.handlers.bpmChange);
+    ui.elements.bpm.addEventListener("input", ui.handlers.bpmFocus);
     ui.elements.bpm.addEventListener("focus", ui.handlers.bpmFocus);
     ui.elements.bpm.addEventListener("blur", ui.handlers.bpmBlur);
     ui.elements.volumeClicker.addEventListener("input", ui.handlers.volumeInput);
     ui.elements.timeSignature.addEventListener("change", ui.handlers.timeSignatureChange);
     ui.elements.tap.addEventListener("mousedown", ui.handlers.tapClick);
+
+	browser.runtime.onMessage.addListener(async (message) => {
+        if (Array.isArray(message?.type) && message.type[0] === "manual-mode" && message.type[1] === "force-update") {
+            await stateUpdate();
+        }
+    });
 
     await stateUpdate();
 } 

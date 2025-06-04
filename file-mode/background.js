@@ -24,7 +24,7 @@ export const messageHandlers = {
 		/** @type {Uint8Array} */
 		const buffer = new Uint8Array(message.data.buffer).buffer;
 
-		audio.close();
+		await audio.close();
 
 		const setup = await audio.setup(buffer);
 		if (!setup || setup.type === "failure") {
@@ -45,25 +45,24 @@ export const messageHandlers = {
 		state.songTimeLast = 0.;
 		state.songTimeAtStart = null;
 		state.analysis = null;
-
-		const analysisStarted = audio.startAnalysis();
-		if (analysisStarted.type === "failure") {
-			return failure({
-				description: "Couldn't start analysis"
-			});
-		}
+		state.tempoMultiplier = 1;
+		state.clickOffset = 0;
 
 		return success();
 	},
 
 	async "unload-file"() {
-		const closed = audio.close();
-		if (closed) {
-			return success();
-		}
-		else {
-			return failure();
-		}
+		await audio.close();
+		state.file = null;
+		state.playing = false;
+		state.duration = null;
+		state.contextTimeAtStart = null;
+		state.songTimeLast = null;
+		state.songTimeAtStart = null;
+		state.analysis = null;
+		state.tempoMultiplier = 1;
+		state.clickOffset = 0;
+		return success();
 	},
 
 	async "get-state"() {
@@ -83,7 +82,9 @@ export const messageHandlers = {
 			analysis: state.analysis ? {
 				bpm: state.analysis.bpm,
 				beats: state.analysis?.beats
-			} : null
+			} : null,
+			tempoPower: state.tempoPower,
+			clickOffset: state.clickOffset
 		};
 
 		const currentTime = audio.getContextCurrentTime();
@@ -194,5 +195,65 @@ export const messageHandlers = {
 
 			return success();
 		}
+	},
+
+	async "change-tempo-multiplier"(message) {
+		const direction = message?.data?.direction;
+
+		if (direction === undefined) {
+			return failure({
+				description: "`direction` wasn't received"
+			});
+		}
+
+		if (direction !== 1 && direction !== -1) {
+			return failure({
+				description: `\`direction\` must be either 1 (double) or -1 (half) (${direction})`
+			});
+		}
+
+		state.clickOffset /= Math.pow(2, direction);
+
+		state.tempoPower += direction;
+
+		if (state.playing) {
+			const restarted = audio.start();
+			if (restarted.type === "failure") {
+				return failure({
+					description: "Failed to restart playback: " + restarted?.description ?? "Unknown error"
+				});
+			}
+		}
+
+		return success();
+	},
+
+	async "change-click-offset"(message) {
+		const offset = message?.data?.offset;
+
+		if (offset === undefined) {
+			return failure({
+				description: "`offset` wasn't received"
+			});
+		}
+
+		if (typeof offset !== "number") {
+			return failure({
+				description: "`offset` must be a number"
+			});
+		}
+
+		state.clickOffset = offset;
+
+		if (state.playing) {
+			const restarted = audio.start();
+			if (restarted.type === "failure") {
+				return failure({
+					description: "Failed to restart playback: " + restarted?.description ?? "Unknown error"
+				});
+			}
+		}
+
+		return success();
 	}
 };
